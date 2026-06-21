@@ -1,48 +1,47 @@
 console.log("app.js loaded");
 
-const button = document.getElementById("verifyBtn");
+document.getElementById("verifyBtn").addEventListener("click", async () => {
 
-button.addEventListener("click", async () => {
+    const text = document.getElementById("newsInput").value;
+    const resultBox = document.getElementById("result");
+
+    if (!text.trim()) {
+        resultBox.className = "uncertain";
+        resultBox.innerHTML = "⚠ Please enter news text";
+        return;
+    }
+
+    resultBox.className = "uncertain";
+    resultBox.innerHTML = "🔄 Analyzing...";
 
     try {
-
-        const text =
-            document.getElementById("newsInput").value;
-
-        if (!text.trim()) {
-            document.getElementById("result").innerText =
-                "Please enter some news text.";
-            return;
-        }
-
-        document.getElementById("result").innerText =
-            "Verifying...";
-
-        const response = await fetch(
-            "http://localhost:5000/verify",
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    text: text
-                })
-            }
-        );
+        const response = await fetch("http://localhost:5000/verify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text })
+        });
 
         const data = await response.json();
 
-        document.getElementById("result").innerText =
-            data.message;
+        let className = "uncertain";
 
-        console.log(data);
+        if (data.message.includes("Real")) {
+            className = "real";
+        } else if (data.message.includes("Fake")) {
+            className = "fake";
+        }
 
-    } catch (error) {
+        resultBox.className = className;
 
-        console.error(error);
+        resultBox.innerHTML = `
+            <div>${data.message}</div>
+            <div style="margin-top:5px;">
+                Score: ${data.credibilityScore}/100
+            </div>
+        `;
 
-        document.getElementById("result").innerText =
-            "Error connecting to backend.";
+    } catch (err) {
+        resultBox.className = "fake";
+        resultBox.innerHTML = "❌ Backend not connected";
     }
 });
