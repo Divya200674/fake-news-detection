@@ -1,28 +1,46 @@
-const express = require("express");
-const cors = require("cors");
-
-const app = express();
-
-app.use(cors());
-app.use(express.json());
-
-app.get("/", (req, res) => {
-    res.send("Fake News Detection Server Running");
-});
-
 app.post("/verify", (req, res) => {
-
     const { text } = req.body;
 
-    console.log("Received News:", text);
+    console.log("Received:", text);
+
+    if (!text) {
+        return res.json({
+            success: false,
+            message: "No text provided"
+        });
+    }
+
+    // simple fake detection logic
+    const fakeKeywords = [
+        "100% free",
+        "shocking",
+        "you won't believe",
+        "earn money fast",
+        "click here immediately"
+    ];
+
+    let score = 50; // base score
+
+    fakeKeywords.forEach(word => {
+        if (text.toLowerCase().includes(word)) {
+            score -= 15;
+        }
+    });
+
+    if (text.length < 20) {
+        score -= 10;
+    }
+
+    if (score < 0) score = 0;
+
+    let result = "Uncertain";
+
+    if (score > 70) result = "Likely Real News";
+    else if (score < 40) result = "Likely Fake News";
 
     res.json({
         success: true,
-        message: "Verification Started",
-        received: text
+        message: result,
+        credibilityScore: score
     });
-});
-
-app.listen(5000, () => {
-    console.log("Server running on http://localhost:5000");
 });
