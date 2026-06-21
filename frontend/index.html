@@ -1,29 +1,37 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Fake News Detector AI</title>
-    <link rel="stylesheet" href="style.css">
+  <title>Fake News AI</title>
+  <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
-<div class="container">
+<div class="card">
 
-    <div class="card">
+  <h1>Fake News AI Detector</h1>
 
-        <h1>🧠 Fake News Detector AI</h1>
-        <p class="subtitle">Check whether news is real or fake using AI logic</p>
+  <div class="buttons">
+    <button onclick="setMode('text')">Text</button>
+    <button onclick="setMode('image')">Image</button>
+    <button onclick="setMode('video')">Video</button>
+    <button onclick="setMode('mixed')">Mixed</button>
+  </div>
 
-        <textarea id="newsInput" placeholder="Paste news here..."></textarea>
+  <div id="textBox">
+    <textarea id="newsInput" placeholder="Enter news text..."></textarea>
+  </div>
 
-        <button id="verifyBtn">Analyze News</button>
+  <div id="fileBox" style="display:none;">
+    <input type="file" id="mediaInput">
+  </div>
 
-        <div id="result"></div>
+  <button onclick="analyze()">Analyze</button>
 
-    </div>
+  <div id="result"></div>
 
 </div>
 
 <script src="app.js"></script>
-
 </body>
 </html>

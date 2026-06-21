@@ -1,84 +1,124 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const multer = require("multer");
+const axios = require("axios");
+const Tesseract = require("tesseract.js");
+const fs = require("fs");
 
 const app = express();
 
-// middleware
 app.use(cors());
 app.use(express.json());
+app.use("/uploads", express.static("uploads"));
 
-// check API key
-if (!process.env.GEMINI_API_KEY) {
-  console.error("❌ GEMINI_API_KEY missing in .env file");
-  process.exit(1);
+const PORT = process.env.PORT || 5000;
+const SERPAPI_KEY = process.env.SERPAPI_KEY;
+
+/* ---------------- CREATE UPLOADS ---------------- */
+if (!fs.existsSync("uploads")) {
+  fs.mkdirSync("uploads");
 }
 
-// init Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-// IMPORTANT: use working model
-const model = genAI.getGenerativeModel({
-  model: "gemini-2.0-flash"
+/* ---------------- MULTER ---------------- */
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, "uploads/"),
+  filename: (req, file, cb) =>
+    cb(null, Date.now() + "-" + file.originalname),
 });
 
-// home route
-app.get("/", (req, res) => {
-  res.send("Fake News Detection API running 🚀");
-});
+const upload = multer({ storage });
 
-// MAIN API
-app.post("/verify-news", async (req, res) => {
+/* ---------------- TRUST TIERS ---------------- */
+const TIER_1 = [".gov", ".nic.in", "india.gov.in", "eci.gov.in"];
+const TIER_2 = [
+  "reuters.com",
+  "bbc.com",
+  "thehindu.com",
+  "indianexpress.com",
+  "livemint.com"
+];
+
+function scoreLink(link) {
+  const url = (link || "").toLowerCase();
+
+  if (TIER_1.some(d => url.includes(d))) return 50;
+  if (TIER_2.some(d => url.includes(d))) return 30;
+  return 10;
+}
+
+/* ---------------- SERP SEARCH ---------------- */
+async function searchNews(query) {
+  const url = `https://serpapi.com/search.json?q=${encodeURIComponent(query)}&api_key=${SERPAPI_KEY}`;
+  const res = await axios.get(url);
+  return res.data.organic_results || [];
+}
+
+/* ---------------- CORE ANALYSIS ---------------- */
+async function analyzeText(text) {
+  const results = await searchNews(text);
+
+  let total = 0;
+
+  const sources = results.slice(0, 5).map(r => {
+    const score = scoreLink(r.link);
+    total += score;
+
+    return {
+      title: r.title,
+      link: r.link,
+      score
+    };
+  });
+
+  const finalScore = Math.min(100, total);
+
+  let verdict = "UNVERIFIED";
+  if (finalScore >= 70) verdict = "REAL";
+  else if (finalScore <= 40) verdict = "FAKE";
+
+  return { verdict, finalScore, sources };
+}
+
+/* ---------------- MAIN API ---------------- */
+app.post("/analyze", upload.single("media"), async (req, res) => {
   try {
-    const { text } = req.body;
+    const { text, mode } = req.body;
 
-    if (!text) {
-      return res.status(400).json({
+    let finalText = text || "";
+
+    /* ---------------- IMAGE OCR ---------------- */
+    if (req.file && req.file.mimetype.startsWith("image/")) {
+      const ocr = await Tesseract.recognize(req.file.path, "eng");
+      finalText += " " + ocr.data.text;
+    }
+
+    /* ---------------- VIDEO HANDLING ---------------- */
+    if (req.file && req.file.mimetype.startsWith("video/")) {
+      finalText += " " + req.file.originalname;
+    }
+
+    /* ---------------- EMPTY CHECK ---------------- */
+    if (!finalText.trim()) {
+      return res.json({
         success: false,
-        message: "No text provided"
+        verdict: "UNVERIFIED",
+        score: 0,
+        message: "No input provided"
       });
     }
 
-    const prompt = `
-You are a strict fake news detector.
-
-Analyze the news and respond ONLY in JSON:
-
-{
-  "verdict": "REAL | FAKE | UNVERIFIED",
-  "score": 0-100,
-  "reason": "short explanation"
-}
-
-News:
-"""${text}"""
-`;
-
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const output = response.text();
-
-    let parsed;
-    try {
-      parsed = JSON.parse(output);
-    } catch (err) {
-      parsed = {
-        verdict: "UNVERIFIED",
-        score: 50,
-        reason: "Model did not return proper JSON",
-        raw: output
-      };
-    }
+    const result = await analyzeText(finalText);
 
     res.json({
       success: true,
-      data: parsed
+      mode,
+      ...result,
+      extractedText: finalText
     });
 
   } catch (err) {
-    console.error("ERROR:", err.message);
-
+    console.error(err);
     res.status(500).json({
       success: false,
       error: err.message
@@ -86,9 +126,7 @@ News:
   }
 });
 
-// start server
-const PORT = process.env.PORT || 5000;
-
+/* ---------------- START ---------------- */
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
