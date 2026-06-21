@@ -1,47 +1,40 @@
-console.log("app.js loaded");
+async function verifyNews() {
+  const text = document.getElementById("newsInput").value;
 
-document.getElementById("verifyBtn").addEventListener("click", async () => {
+  if (!text) {
+    alert("Please enter news text");
+    return;
+  }
 
-    const text = document.getElementById("newsInput").value;
-    const resultBox = document.getElementById("result");
+  try {
+    const response = await fetch("http://localhost:5000/verify-news", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ text })
+    });
 
-    if (!text.trim()) {
-        resultBox.className = "uncertain";
-        resultBox.innerHTML = "⚠ Please enter news text";
-        return;
+    const data = await response.json();
+
+    console.log("API Response:", data);
+
+    if (data.success) {
+      document.getElementById("result").innerHTML = `
+        <h3>Verdict: ${data.data.verdict}</h3>
+        <p>Score: ${data.data.score}/100</p>
+        <p>Reason: ${data.data.reason}</p>
+      `;
+    } else {
+      document.getElementById("result").innerHTML =
+        "Error getting result";
     }
 
-    resultBox.className = "uncertain";
-    resultBox.innerHTML = "🔄 Analyzing...";
+  } catch (err) {
+    console.error(err);
+    alert("Server error");
+  }
+}
 
-    try {
-        const response = await fetch("http://localhost:5000/verify", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text })
-        });
-
-        const data = await response.json();
-
-        let className = "uncertain";
-
-        if (data.message.includes("Real")) {
-            className = "real";
-        } else if (data.message.includes("Fake")) {
-            className = "fake";
-        }
-
-        resultBox.className = className;
-
-        resultBox.innerHTML = `
-            <div>${data.message}</div>
-            <div style="margin-top:5px;">
-                Score: ${data.credibilityScore}/100
-            </div>
-        `;
-
-    } catch (err) {
-        resultBox.className = "fake";
-        resultBox.innerHTML = "❌ Backend not connected";
-    }
-});
+// button click
+document.getElementById("verifyBtn").addEventListener("click", verifyNews);

@@ -1,3 +1,4 @@
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
@@ -8,65 +9,86 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 🔑 Gemini setup (PUT YOUR KEY HERE)
-const genAI = new GoogleGenerativeAI("PASTE_YOUR_API_KEY_HERE");
+// check API key
+if (!process.env.GEMINI_API_KEY) {
+  console.error("❌ GEMINI_API_KEY missing in .env file");
+  process.exit(1);
+}
 
-// test route
-app.get("/", (req, res) => {
-    res.send("AI Fake News Detector Running");
+// init Gemini
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// IMPORTANT: use working model
+const model = genAI.getGenerativeModel({
+  model: "gemini-2.0-flash"
 });
 
-// 🔥 AI VERIFY ROUTE
-app.post("/verify", async (req, res) => {
+// home route
+app.get("/", (req, res) => {
+  res.send("Fake News Detection API running 🚀");
+});
+
+// MAIN API
+app.post("/verify-news", async (req, res) => {
+  try {
     const { text } = req.body;
 
-    console.log("Received:", text);
-
-    if (!text || text.trim() === "") {
-        return res.json({
-            success: false,
-            message: "No text provided"
-        });
+    if (!text) {
+      return res.status(400).json({
+        success: false,
+        message: "No text provided"
+      });
     }
 
-    try {
-        const model = genAI.getGenerativeModel({
-            model: "gemini-1.5-flash"
-        });
+    const prompt = `
+You are a strict fake news detector.
 
-        const prompt = `
-You are an expert fake news detection system.
+Analyze the news and respond ONLY in JSON:
 
-Analyze the given news and respond in STRICT format:
-
-Verdict: (Real or Fake or Uncertain)
-Confidence: (0-100)
-Reason: (short explanation in simple English)
+{
+  "verdict": "REAL | FAKE | UNVERIFIED",
+  "score": 0-100,
+  "reason": "short explanation"
+}
 
 News:
-${text}
-        `;
+"""${text}"""
+`;
 
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const aiText = response.text();
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const output = response.text();
 
-        res.json({
-            success: true,
-            message: aiText
-        });
-
-    } catch (error) {
-        console.error(error);
-
-        res.json({
-            success: false,
-            message: "AI request failed"
-        });
+    let parsed;
+    try {
+      parsed = JSON.parse(output);
+    } catch (err) {
+      parsed = {
+        verdict: "UNVERIFIED",
+        score: 50,
+        reason: "Model did not return proper JSON",
+        raw: output
+      };
     }
+
+    res.json({
+      success: true,
+      data: parsed
+    });
+
+  } catch (err) {
+    console.error("ERROR:", err.message);
+
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
 });
 
 // start server
-app.listen(5000, () => {
-    console.log("Server running on http://localhost:5000");
+const PORT = process.env.PORT || 5000;
+
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
 });

@@ -20,6 +20,7 @@
   "homepage": "https://github.com/Divya200674/fake-news-detection#readme",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "axios": "^1.18.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1"
